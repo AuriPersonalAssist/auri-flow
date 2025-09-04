@@ -18,6 +18,10 @@ export default {
 			}
 		},
 		extend: {
+			fontFamily: {
+				inter: ['Inter', 'sans-serif'],
+				sora: ['Sora', 'sans-serif'],
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
@@ -51,6 +55,13 @@ export default {
 				card: {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
+				},
+				auri: {
+					deep: 'hsl(var(--auri-deep))',
+					midnight: 'hsl(var(--auri-midnight))',
+					gold: 'hsl(var(--auri-gold))',
+					'gold-light': 'hsl(var(--auri-gold-light))',
+					silver: 'hsl(var(--auri-silver))'
 				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
