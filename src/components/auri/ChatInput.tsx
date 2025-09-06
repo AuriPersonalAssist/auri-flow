@@ -10,25 +10,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import type { Task, TaskType, PillarBenefits } from '@/lib/engine/types';
-import { DEFAULTS } from '@/lib/engine/calibration';
+import { parseTask, isTaskComplete, toTask } from '@/lib/nlp/parse';
+import { useAuriStore } from '@/lib/store/auriStore';
+import { copy } from '@/lib/copy';
+import { inputVariants } from '@/lib/ui/Motion';
 
 interface ChatInputProps {
-  onTaskCreate: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'priorityScore'>) => void;
+  onSubmit?: (input: string) => void;
   placeholder?: string;
+  disabled?: boolean;
   className?: string;
-}
-
-interface ParsedInput {
-  title: string;
-  description?: string;
-  type: TaskType;
-  durationMin?: number;
-  effort?: number;
-  startTime?: string;
-  endTime?: string;
-  benefits: PillarBenefits;
-  confidence: number; // 0-1
 }
 
 // Web Speech API types
@@ -59,141 +50,21 @@ declare global {
   }
 }
 
-const parseNaturalInput = (input: string): ParsedInput => {
-  console.log('[Auri::ChatInput] Parsing input:', input);
-  
-  const lowercaseInput = input.toLowerCase();
-  
-  // Extract task type
-  let type: TaskType = 'outro';
-  if (lowercaseInput.includes('estudar') || lowercaseInput.includes('estudo') || lowercaseInput.includes('prova')) {
-    type = 'estudo';
-  } else if (lowercaseInput.includes('treino') || lowercaseInput.includes('academia') || lowercaseInput.includes('exercício')) {
-    type = 'treino';
-  } else if (lowercaseInput.includes('dormir') || lowercaseInput.includes('sono') || lowercaseInput.includes('descansar')) {
-    type = 'sono';
-  } else if (lowercaseInput.includes('ler') || lowercaseInput.includes('leitura') || lowercaseInput.includes('livro')) {
-    type = 'leitura';
-  }
-  
-  // Extract duration (look for patterns like "2 horas", "30 minutos", "1h30m")
-  let durationMin: number | undefined;
-  const durationPatterns = [
-    /(\d+)\s*h(?:oras?)?\s*(?:e\s*)?(\d+)?\s*m(?:inutos?)?/i,
-    /(\d+)\s*horas?/i,
-    /(\d+)\s*minutos?/i,
-    /(\d+)\s*min/i
-  ];
-  
-  for (const pattern of durationPatterns) {
-    const match = input.match(pattern);
-    if (match) {
-      if (pattern.source.includes('h.*m')) {
-        // Format like "2h30m"
-        const hours = parseInt(match[1]) || 0;
-        const minutes = parseInt(match[2]) || 0;
-        durationMin = hours * 60 + minutes;
-      } else if (pattern.source.includes('horas')) {
-        // Format like "2 horas"
-        durationMin = (parseInt(match[1]) || 0) * 60;
-      } else {
-        // Format like "30 minutos"
-        durationMin = parseInt(match[1]) || 0;
-      }
-      break;
-    }
-  }
-  
-  // Extract time (look for patterns like "às 14:30", "14h", "2 da tarde")
-  let startTime: string | undefined;
-  const timePatterns = [
-    /(?:às\s*)?(\d{1,2}):(\d{2})/i,
-    /(?:às\s*)?(\d{1,2})h(\d{2})?/i,
-    /(\d{1,2})\s*da\s*(manhã|tarde|noite)/i
-  ];
-  
-  for (const pattern of timePatterns) {
-    const match = input.match(pattern);
-    if (match) {
-      let hours = parseInt(match[1]) || 0;
-      const minutes = parseInt(match[2]) || 0;
-      
-      if (match[3]) {
-        // Handle "da tarde", "da noite"
-        const period = match[3];
-        if (period === 'tarde' && hours < 12) hours += 12;
-        if (period === 'noite' && hours < 12) hours += 12;
-        if (period === 'manhã' && hours === 12) hours = 0;
-      }
-      
-      const today = new Date();
-      today.setHours(hours, minutes, 0, 0);
-      startTime = today.toISOString();
-      break;
-    }
-  }
-  
-  // Extract effort level (look for words indicating difficulty)
-  let effort = 5; // Default medium effort
-  if (lowercaseInput.includes('fácil') || lowercaseInput.includes('simples') || lowercaseInput.includes('rápido')) {
-    effort = 3;
-  } else if (lowercaseInput.includes('difícil') || lowercaseInput.includes('complexo') || lowercaseInput.includes('desafiador')) {
-    effort = 8;
-  } else if (lowercaseInput.includes('muito difícil') || lowercaseInput.includes('impossível')) {
-    effort = 10;
-  }
-  
-  // Get default benefits for task type
-  const benefits = DEFAULTS.defaultBenefits[type] || DEFAULTS.defaultBenefits.outro;
-  
-  // Clean title (remove time and duration info)
-  let title = input;
-  durationPatterns.forEach(pattern => {
-    title = title.replace(pattern, '');
-  });
-  timePatterns.forEach(pattern => {
-    title = title.replace(pattern, '');
-  });
-  title = title.replace(/\b(às|por|durante|fácil|difícil|simples|complexo)\b/gi, '');
-  title = title.trim().replace(/\s+/g, ' ');
-  
-  // Capitalize first letter
-  title = title.charAt(0).toUpperCase() + title.slice(1);
-  
-  // Calculate confidence based on what we found
-  let confidence = 0.5;
-  if (type !== 'outro') confidence += 0.2;
-  if (durationMin) confidence += 0.2;
-  if (startTime) confidence += 0.1;
-  
-  const result: ParsedInput = {
-    title,
-    type,
-    durationMin,
-    effort,
-    startTime,
-    endTime: startTime && durationMin ? 
-      new Date(new Date(startTime).getTime() + durationMin * 60000).toISOString() : 
-      undefined,
-    benefits,
-    confidence: Math.min(1, confidence)
-  };
-  
-  console.log('[Auri::ChatInput] Parsed result:', result);
-  return result;
-};
-
 export const ChatInput: React.FC<ChatInputProps> = ({
-  onTaskCreate,
-  placeholder = "Diga o que precisa, eu organizo ✨",
+  onSubmit,
+  placeholder = copy.input.placeholder,
+  disabled = false,
   className
 }) => {
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [parsedTask, setParsedTask] = useState<any>(null);
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const { toast } = useToast();
+  const { addTask } = useAuriStore();
 
   // Check for speech recognition support
   useEffect(() => {
@@ -250,54 +121,55 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isProcessing) return;
 
+    console.log('[Auri::ChatInput] Submitting:', input);
     setIsProcessing(true);
     
     try {
-      console.log('[Auri::ChatInput] Processing input:', input);
+      const parsed = parseTask(input.trim());
       
-      const parsed = parseNaturalInput(input.trim());
-      
-      if (!parsed.title) {
+      if (isTaskComplete(parsed)) {
+        // Task is complete, add directly
+        const task = toTask(parsed);
+        addTask(task);
+        setInput('');
+        
         toast({
-          title: "Não consegui entender",
-          description: "Tente descrever a tarefa de forma mais clara.",
-          variant: "destructive"
+          title: copy.actions.organized,
+          description: copy.confirmations.task,
         });
-        return;
+      } else {
+        // Need confirmation
+        setParsedTask(parsed);
+        setShowConfirmation(true);
       }
-
-      const newTask: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'priorityScore'> = {
-        title: parsed.title,
-        description: parsed.description,
-        type: parsed.type,
-        durationMin: parsed.durationMin,
-        effort: parsed.effort,
-        start: parsed.startTime,
-        end: parsed.endTime,
-        benefits: parsed.benefits,
-        completed: false,
-        money: 0
-      };
-
-      onTaskCreate(newTask);
-      setInput('');
       
-      toast({
-        title: "Tarefa criada!",
-        description: `"${parsed.title}" foi adicionada à sua lista com prioridade calculada.`,
-      });
-      
+      await onSubmit?.(input.trim());
     } catch (error) {
-      console.error('[Auri::ChatInput] Error processing input:', error);
+      console.error('[Auri::ChatInput] Submit error:', error);
       toast({
-        title: "Erro ao processar",
-        description: "Não foi possível criar a tarefa. Tente novamente.",
-        variant: "destructive"
+        title: copy.errors.generic,
+        description: copy.errors.parse,
+        variant: "destructive",
       });
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleConfirmTask = () => {
+    if (parsedTask) {
+      const task = toTask(parsedTask);
+      addTask(task);
+      setInput('');
+      setShowConfirmation(false);
+      setParsedTask(null);
+      
+      toast({
+        title: copy.actions.organized,
+        description: copy.confirmations.task,
+      });
     }
   };
 
@@ -312,14 +184,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     <div className={cn('space-y-4', className)}>
       {/* Input Area */}
       <div className="relative">
-        <Textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          className="min-h-[100px] pr-24 resize-none border-accent/20 focus:border-accent"
-          disabled={isListening || isProcessing}
-        />
+        <motion.div
+          variants={inputVariants}
+          initial="idle"
+          animate={isListening ? "recording" : "idle"}
+        >
+          <Textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className="min-h-[100px] pr-24 resize-none border-aurigold/20 focus:border-aurigold/50 rounded-2xl font-sans backdrop-blur-sm bg-background/80"
+            disabled={isListening || isProcessing || disabled}
+          />
+        </motion.div>
         
         {/* Voice/Send Button */}
         <div className="absolute bottom-3 right-3 flex gap-2">
@@ -334,8 +212,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   size="sm"
                   variant={isListening ? "default" : "outline"}
                   onClick={isListening ? stopListening : startListening}
-                  disabled={isProcessing}
+                  disabled={isProcessing || disabled}
                   className={cn(
+                    "hover-lift",
                     isListening && "bg-red-500 hover:bg-red-600 text-white"
                   )}
                 >
@@ -352,8 +231,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <Button
             size="sm"
             onClick={handleSubmit}
-            disabled={!input.trim() || isListening || isProcessing}
-            className="bg-accent hover:bg-accent/90"
+            disabled={!input.trim() || isListening || isProcessing || disabled}
+            className="bg-aurigold hover:bg-aurigold/90 text-auriblue hover-lift"
           >
             {isProcessing ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -375,8 +254,48 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           >
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
             <span className="text-sm text-red-700 font-medium">
-              Ouvindo... (clique para parar)
+              {copy.input.voicePlaceholder}
             </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmation Dialog */}
+      <AnimatePresence>
+        {showConfirmation && parsedTask && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="glass-card rounded-2xl p-4 border border-aurigold/20"
+          >
+            <h3 className="font-display font-semibold text-lg mb-2">
+              {parsedTask.title}
+            </h3>
+            <div className="flex gap-2 mb-4">
+              <span className="px-2 py-1 bg-aurigold/10 text-aurigold rounded-lg text-sm">
+                {copy.taskTypes[parsedTask.type] || parsedTask.type}
+              </span>
+              {parsedTask.durationMin && (
+                <span className="px-2 py-1 bg-muted rounded-lg text-sm">
+                  {parsedTask.durationMin}min
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleConfirmTask}
+                className="bg-aurigold hover:bg-aurigold/90 text-auriblue"
+              >
+                Confirmar
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowConfirmation(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -385,7 +304,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       <div className="flex flex-wrap gap-2">
         <Badge 
           variant="outline" 
-          className="cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+          className="cursor-pointer hover:bg-aurigold hover:text-auriblue transition-colors"
           onClick={() => setInput('Estudar matemática por 2 horas às 14h')}
         >
           <Sparkles className="w-3 h-3 mr-1" />
@@ -393,7 +312,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </Badge>
         <Badge 
           variant="outline" 
-          className="cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+          className="cursor-pointer hover:bg-aurigold hover:text-auriblue transition-colors"
           onClick={() => setInput('Treino na academia por 1 hora às 7h')}
         >
           <Sparkles className="w-3 h-3 mr-1" />
@@ -401,7 +320,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </Badge>
         <Badge 
           variant="outline" 
-          className="cursor-pointer hover:bg-accent hover:text-accent-foreground transition-colors"
+          className="cursor-pointer hover:bg-aurigold hover:text-auriblue transition-colors"
           onClick={() => setInput('Ler 20 páginas do livro por 40 minutos')}
         >
           <Sparkles className="w-3 h-3 mr-1" />

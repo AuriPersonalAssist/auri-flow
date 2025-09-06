@@ -21,6 +21,9 @@ export default {
 			fontFamily: {
 				inter: ['Inter', 'sans-serif'],
 				sora: ['Sora', 'sans-serif'],
+				sans: ["Inter", "sans-serif"],
+				serif: ["Playfair Display", "serif"],
+				display: ["Playfair Display", "serif"],
 			},
 			colors: {
 				border: 'hsl(var(--border))',
@@ -63,6 +66,9 @@ export default {
 					'gold-light': 'hsl(var(--auri-gold-light))',
 					silver: 'hsl(var(--auri-silver))'
 				},
+				auriblue: "hsl(214, 52%, 12%)",
+				aurigold: "hsl(45, 65%, 52%)",
+				mist: "hsl(225, 25%, 97%)",
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
@@ -77,7 +83,13 @@ export default {
 			borderRadius: {
 				lg: 'var(--radius)',
 				md: 'calc(var(--radius) - 2px)',
-				sm: 'calc(var(--radius) - 4px)'
+				sm: 'calc(var(--radius) - 4px)',
+				"2xl": "24px",
+				"3xl": "32px",
+			},
+			boxShadow: {
+				elev: "0 20px 50px -20px rgba(10, 26, 47, 0.35)",
+				gold: "0 8px 32px -8px rgba(212, 175, 55, 0.3)",
 			},
 			keyframes: {
 				'accordion-down': {

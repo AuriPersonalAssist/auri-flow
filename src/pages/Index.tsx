@@ -169,7 +169,7 @@ const Index = () => {
             className="max-w-2xl mx-auto"
           >
             <div className="card-luxury p-6">
-              <ChatInput onTaskCreate={handleTaskCreate} />
+              <ChatInput />
             </div>
           </motion.section>
 

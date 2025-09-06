@@ -39,17 +39,17 @@ export const DEFAULTS = {
     } as ContinuousMeta,
   },
   
-  // Parâmetros de custo
+  // Parâmetros de custo (reduzidos para melhor scoring)
   cost: {
-    ct: 8,    // Custo por hora de tempo
-    ce: 6,    // Custo por unidade de esforço
-    c$: 2,    // Multiplicador custo monetário
+    ct: 2,    // Custo por hora de tempo
+    ce: 1,    // Custo por unidade de esforço
+    c$: 1,    // Multiplicador custo monetário
     kSetup: { // Custos fixos de setup por tipo
-      estudo: 10,
-      treino: 5,
-      sono: 2,
-      leitura: 3,
-      outro: 5
+      estudo: 3,
+      treino: 2,
+      sono: 1,
+      leitura: 2,
+      outro: 2
     }
   },
   
